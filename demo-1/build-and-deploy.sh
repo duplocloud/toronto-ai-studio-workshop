@@ -2,9 +2,9 @@
 
 # Configuration
 VERSION=""
-ECR_REPOSITORY_NAME="aws-workshop-demo"
+ECR_REPOSITORY_NAME="agents"
 AWS_REGION="us-east-1"
-LOCAL_CONTAINER_IMAGE="localhost/$ECR_REPOSITORY_NAME:$VERSION"
+ACCOUNT_ID="715432481168"
 
 # Set platform for AWS deployment (always linux/amd64)
 PLATFORM="linux/amd64"
@@ -30,6 +30,9 @@ else
     echo "Extracted username from URL: $USERNAME"
 fi
 
+# Set local container image name using USERNAME
+LOCAL_CONTAINER_IMAGE="localhost/$ECR_REPOSITORY_NAME:$USERNAME"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -48,17 +51,6 @@ if [ $? -ne 0 ]; then
 fi
 
 echo -e "${GREEN}Image built successfully.${NC}"
-
-# Get AWS account ID
-echo "Getting AWS account ID..."
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to get AWS account ID.${NC}"
-    exit 1
-fi
-
-echo "Account ID: $ACCOUNT_ID"
 
 # Authenticate with ECR
 echo "Authenticating with ECR..."
@@ -84,7 +76,7 @@ echo -e "${GREEN}Local image found.${NC}"
 
 # Tag the image
 echo "Tagging image '$LOCAL_CONTAINER_IMAGE'..."
-docker tag $LOCAL_CONTAINER_IMAGE $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$VERSION
+docker tag $LOCAL_CONTAINER_IMAGE $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$USERNAME
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to tag image. Make sure '$LOCAL_CONTAINER_IMAGE' exists.${NC}"
@@ -95,11 +87,11 @@ echo -e "${GREEN}Image tagged successfully.${NC}"
 
 # Push the image
 echo "Pushing image to ECR..."
-docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$VERSION
+docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$USERNAME
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}Image pushed successfully!${NC}"
-    echo "Image URI: $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$VERSION"
+    echo "Image URI: $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_NAME:$USERNAME"
 else
     echo -e "${RED}Error: Failed to push image.${NC}"
     exit 1
