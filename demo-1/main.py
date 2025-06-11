@@ -63,3 +63,12 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         # Return error response with 500 status
         raise HTTPException(status_code=500, detail=error_response)
 
+if __name__ == "__main__":
+
+        uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=True,     # set True for auto-reload in dev
+        log_level="info",
+    )

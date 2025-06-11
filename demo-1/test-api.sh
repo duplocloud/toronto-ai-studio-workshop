@@ -34,7 +34,7 @@ test_chat_endpoint() {
     
     response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${CHAT_ENDPOINT}" \
         -H "Content-Type: application/json" \
-        -d '{"message": "Hello, world!"}')
+        -d '{"messages": [{"role":"user", "content":"Hello World!"}]}')
     
     http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
     body=$(echo "$response" | sed '/HTTP_CODE:/d')
@@ -42,7 +42,7 @@ test_chat_endpoint() {
     if [ "$http_code" = "200" ]; then
         echo -e "${GREEN}✓ Chat endpoint successful (HTTP $http_code)${NC}"
         echo " "
-        echo " $body"
+        echo " $body" | jq
     else
         echo -e "${RED}✗ Chat endpoint failed (HTTP $http_code)${NC}"
         echo -e "${RED} $body${NC}"
