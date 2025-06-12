@@ -20,15 +20,80 @@ def parse_request_v1(
         ValueError: If required fields are missing or invalid
     """
     
+    response = {}
     # Extract the current message content
     current_content = payload.get("content", "")
+
+    if current_content:
+        response["content"] = current_content
+    # Extract the past messages
     past_messages = payload.get("pastMessages", [])
     thread_id = payload.get("thread_id", "")
     tenant_id = payload.get("tenant_id", "")
     platform_context = payload.get("platform_context", {})
     data = payload.get("data", {})
+
     
-    return current_content
+
+    if data:
+        response["past_messages_count"] = len(past_messages)
+        response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("cmds", []) or [])]
+        response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executed_cmds", []) or [])]
+        response["url_configs"] = data.get("url_configs", [])
+    
+    return response
+
+def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform a command dictionary from the old format to the new format.
+    
+    Args:
+        command_dict: Dictionary containing command information in the format:
+            {
+                "command": str,
+                "execute": bool,
+                "files": List[Dict[str, str]]
+            }
+            
+    Returns:
+        Dictionary in the new format:
+            {
+                "Command": str,
+                "Output": str,
+                "execute": bool
+            }
+    """
+    return {
+        "Command": command_dict.get("command", ""),
+        "Output": "",
+        "execute": command_dict.get("execute", False)
+    }
+
+def reverse_transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform a command dictionary from the new format back to the old format.
+    
+    Args:
+        command_dict: Dictionary containing command information in the format:
+            {
+                "Command": str,
+                "Output": str,
+                "execute": bool
+            }
+            
+    Returns:
+        Dictionary in the old format:
+            {
+                "command": str,
+                "execute": bool,
+                "files": List[Dict[str, str]]
+            }
+    """
+    return {
+        "command": command_dict.get("Command", ""),
+        "execute": command_dict.get("execute", False),
+        "files": []
+    }
 
 def create_response_v1(
         response_text: str,
@@ -40,23 +105,27 @@ def create_response_v1(
     """
     Generate a chat response based on the payload.
     """
+    # Transform commands if they exist
+    transformed_cmds = [transform_command(cmd) for cmd in (cmds or [])]
+    transformed_executed_cmds = [transform_command(cmd) for cmd in (executed_cmds or [])]
+
     return {
-                "pastMessages": payload.get("pastMessages", []),
-                "Content": response_text,
-                "terminalCommands": [],
-                "thread_id": payload.get("thread_id", ""),
-                "tenant_id": payload.get("tenant_id", ""),
-                "agent_managed_memory": payload.get("agent_managed_memory", True),
-                "platform_context": payload.get("platform_context", {}),
-                "data": {
-                    "response_type": "success",
-                    "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
-                    "cmds": cmds or [],
-                    "executed_cmds": executed_cmds or [],
-                    "url_configs": url_configs or []
-                },
-                "id": None
-            }
+        "pastMessages": payload.get("pastMessages", []) if payload else [],
+        "Content": response_text,
+        "terminalCommands": [],
+        "thread_id": payload.get("thread_id", "") if payload else "",
+        "tenant_id": payload.get("tenant_id", "") if payload else "",
+        "agent_managed_memory": payload.get("agent_managed_memory", True) if payload else True,
+        "platform_context": payload.get("platform_context", {}) if payload else {},
+        "data": {
+            "response_type": "success",
+            "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "Cmds": transformed_cmds,
+            "executedCmds": transformed_executed_cmds or [],
+            "url_configs": url_configs or []
+        },
+        "id": None
+    }
 
 
 def parse_request_v2(
@@ -79,7 +148,13 @@ def parse_request_v2(
             return ""
         
     last_message = payload["messages"][-1]
-    return str(last_message["content"])
+
+    return {
+        "content": str(last_message["content"]),
+        "cmds": payload.get("data", {}).get("cmds", []),
+        "executed_cmds": payload.get("data", {}).get("executed_cmds", []),
+        "url_configs": payload.get("data", {}).get("url_configs", [])
+    }
 
 def create_response_v2(
         response_text: str,
@@ -323,7 +398,7 @@ class Endpoint:
         }
 
 
-def run_subprocess_command(payload: Dict[str, Any], command: str, shell=False, capture_stderr=True, text=True, timeout=None):
+def run_subprocess_command(command: str, shell=True, capture_stderr=True, text=True, timeout=None):
     """
     Run a subprocess command and capture all output.
     
@@ -473,4 +548,5 @@ def get_bedrock_claude_3_5(session: any) -> str:
             tools=[],
             workflow=[],
             boto_session=session
-        ) 
+        )
+

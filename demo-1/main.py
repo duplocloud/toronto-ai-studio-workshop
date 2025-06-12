@@ -23,7 +23,8 @@ async def chat(payload: Dict[str, Any] = Body(...)):
     try:
         
         # Parse content from the payload using the utility method
-        content = Endpoint.parse(payload)
+        message = Endpoint.parse(payload)
+        content = message.get("content", "")
 
         print(f"Extracted content: {content}")
         

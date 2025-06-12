@@ -33,10 +33,12 @@ def parse_request_v1(
     platform_context = payload.get("platform_context", {})
     data = payload.get("data", {})
 
+    
+
     if data:
         response["past_messages_count"] = len(past_messages)
-        response["cmds"] = data.get("cmds", [])
-        response["executed_cmds"] = data.get("executed_cmds", [])
+        response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("cmds", []) or [])]
+        response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executed_cmds", []) or [])]
         response["url_configs"] = data.get("url_configs", [])
     
     return response
@@ -65,6 +67,32 @@ def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
         "Command": command_dict.get("command", ""),
         "Output": "",
         "execute": command_dict.get("execute", False)
+    }
+
+def reverse_transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform a command dictionary from the new format back to the old format.
+    
+    Args:
+        command_dict: Dictionary containing command information in the format:
+            {
+                "Command": str,
+                "Output": str,
+                "execute": bool
+            }
+            
+    Returns:
+        Dictionary in the old format:
+            {
+                "command": str,
+                "execute": bool,
+                "files": List[Dict[str, str]]
+            }
+    """
+    return {
+        "command": command_dict.get("Command", ""),
+        "execute": command_dict.get("execute", False),
+        "files": []
     }
 
 def create_response_v1(
@@ -521,3 +549,4 @@ def get_bedrock_claude_3_5(session: any) -> str:
             workflow=[],
             boto_session=session
         )
+
