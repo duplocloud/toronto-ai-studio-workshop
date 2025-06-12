@@ -65,7 +65,7 @@ def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     return {
         "Command": command_dict.get("command", ""),
-        "Output": "",
+        "Output": command_dict.get("output", ""),
         "execute": command_dict.get("execute", False)
     }
 

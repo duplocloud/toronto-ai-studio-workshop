@@ -38,13 +38,12 @@ async def chat(payload: Dict[str, Any] = Body(...)):
                 if execute:
                     response = run_subprocess_command(command_text)
                     # Add the response to the payload
-                    command_response = response.get("stdout", "")
-                    response_text += f"\n{command_text}\n{command_response}"
+                    command["output"] = response.get("stdout", "")
                     executed_commands.append(command)
                 else:
                     cmds.append(command)
         else:
-            response_text = "Did you approve the commands?"
+            response_text = "Would like to list the files in the current directory?"
             cmds.append({
                 "command": "ls -l",
                 "execute": False,
