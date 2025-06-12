@@ -40,6 +40,7 @@ def parse_request_v1(
         response["past_messages_count"] = len(past_messages)
         response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("Cmds", []) or [])]
         response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executedCmds", []) or [])]
+
         response["url_configs"] = data.get("url_configs", [])
     
     return response
@@ -93,7 +94,7 @@ def reverse_transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "command": command_dict.get("Command", ""),
         "execute": command_dict.get("execute", False),
-        "files": []
+        "files": command_dict.get("files", [])
     }
 
 def create_response_v1(
@@ -401,7 +402,7 @@ class Endpoint:
         }
 
 
-def run_subprocess_command(command: str, shell=True, capture_stderr=True, text=True, timeout=None):
+def run_subprocess_command(command: str, shell=True, capture_stderr=True, text=True, timeout=None,cwd=None):
     """
     Run a subprocess command and capture all output.
     
@@ -433,6 +434,7 @@ def run_subprocess_command(command: str, shell=True, capture_stderr=True, text=T
             capture_output=True,
             text=text,
             timeout=timeout,
+            cwd=cwd,
             check=False  # Don't raise exception on non-zero exit codes
         )
         

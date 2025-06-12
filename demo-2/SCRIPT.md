@@ -187,3 +187,9 @@ This is Duplo Cloud platform. What we are interested in is the AI Suite. click o
 
 29. This is the moment of truth. When the agent works.
 H
+
+DEMO 2:
+
+Possible Use Case. A real world used case...
+NOTES: Files, create a simple exmaple. but speak to an LLM converting a docker compose file to helm files and then reviewing the contents. Then you're able to run the generated files once you approve them.
+

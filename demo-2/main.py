@@ -1,3 +1,6 @@
+import os
+import shutil
+import tempfile
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from typing import Dict, Any
@@ -23,7 +26,7 @@ async def chat(payload: Dict[str, Any] = Body(...)):
     try:
 
         print(f"[CHAT REQUEST] Received payload: {json.dumps(payload, indent=2)}")
-        
+
         # Parse content from the payload using the utility method
         request = Endpoint.parse(payload)
         response_text = ""
@@ -34,24 +37,70 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         if len(commands) > 0:
             executed_commands = []
             for command in commands:
+                print(f"[CHAT EXECUTE COMMAND] Command: {json.dumps(command, indent=2)}")
                 command_text = command.get("command", "")
                 execute = command.get("execute", False)
                 files = command.get("files", [])
 
                 if execute:
-                    response = run_subprocess_command(command_text)
-                    # Add the response to the payload
-                    command["output"] = response.get("stdout", "")
-                    executed_commands.append(command)
+                    temp_dir = tempfile.mkdtemp()
+                    try:
+
+
+                        for file_info in files:
+                            file_path = file_info.get("file_path")
+                            file_content = file_info.get("file_content")
+                            
+                            if not file_path or file_content is None:
+                                continue
+                                
+                            # Create full path within the temp directory
+                            full_path = os.path.join(temp_dir, file_path)
+                                
+                            # Create directory structure if it doesn't exist
+                            dir_path = os.path.dirname(full_path)
+                            if dir_path and not os.path.exists(dir_path):
+                                os.makedirs(dir_path)
+                                
+                            # Write the file
+                            with open(full_path, 'w') as f:
+                                f.write(file_content)
+                                    
+                            command_text = f"cd {temp_dir} && {command_text}"
+                            response = run_subprocess_command(command_text, cwd=temp_dir)
+                            # Add the response to the payload
+                            command["output"] = response.get("stdout", "") # json.dumps(response, indent=2)
+                            print(f"[CHAT EXECUTE COMMAND] Response: {json.dumps(response, indent=2)}")
+
+                            executed_commands.append(command)
+                    except Exception as e:
+                        print(f"[CHAT EXECUTE COMMAND] Error: {e}")
+                        command["output"] = f"Error: {e}"
+                    finally:
+                        # Clean up the temporary directory
+                        shutil.rmtree(temp_dir)
                 else:
                     cmds.append(command)
         else:
             response_text = "Would like to list the files in the current directory?"
             cmds.append({
-                "command": "ls -l",
+                "command": "cat sample.txt",
                 "execute": False,
-                "files": []
+                "files": [
+                    {
+                        "file_path": "sample.txt",
+                        "file_content": "Hello, world!dsfasddf"
+                    }
+                ]
             })
+
+           # tmp1
+           # cds into tmp1
+           # create a file called sample.txt with the content "Hello, world!"
+           # when in the tmp1 directory, runs the command "cat sample.txt"
+           # when it's done, it should return the content of the file and delete the tmp1
+
+           
 
         return Endpoint.success(
             content=response_text,
