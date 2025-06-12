@@ -68,6 +68,7 @@ def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "Command": command_dict.get("command", ""),
         "Output": command_dict.get("output", ""),
+        "files": command_dict.get("files", []),
         "execute": command_dict.get("execute", False)
     }
 
