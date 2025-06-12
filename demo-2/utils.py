@@ -1,3 +1,4 @@
+import json
 from typing import Dict, Any, List, Optional
 import datetime
 import subprocess
@@ -37,8 +38,8 @@ def parse_request_v1(
 
     if data:
         response["past_messages_count"] = len(past_messages)
-        response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("cmds", []) or [])]
-        response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executed_cmds", []) or [])]
+        response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("Cmds", []) or [])]
+        response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executedCmds", []) or [])]
         response["url_configs"] = data.get("url_configs", [])
     
     return response
@@ -212,7 +213,9 @@ class Endpoint:
         Returns:
             Standardized success response dictionary
         """
-        return create_response_v1(content, payload, cmds, executed_cmds, url_configs)
+        response = create_response_v1(content, payload, cmds, executed_cmds, url_configs)
+        print(f"[CHAT RESPONSE] Sending response: {json.dumps(response, indent=2)}")
+        return response
 
     @staticmethod
     def get_platform_context(payload: Dict[str, Any]) -> Dict[str, Any]:

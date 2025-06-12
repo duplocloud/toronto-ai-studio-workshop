@@ -21,6 +21,9 @@ async def chat(payload: Dict[str, Any] = Body(...)):
     Accepts a message payload and echoes it back in the original complex format.
     """
     try:
+
+        print(f"[CHAT REQUEST] Received payload: {json.dumps(payload, indent=2)}")
+        
         # Parse content from the payload using the utility method
         request = Endpoint.parse(payload)
         response_text = ""

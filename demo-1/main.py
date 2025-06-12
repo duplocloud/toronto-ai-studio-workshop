@@ -22,6 +22,8 @@ async def chat(payload: Dict[str, Any] = Body(...)):
     """
     try:
         
+        print(f"[CHAT REQUEST] Received payload: {json.dumps(payload, indent=2)}")
+
         # Parse content from the payload using the utility method
         message = Endpoint.parse(payload)
         content = message.get("content", "")
