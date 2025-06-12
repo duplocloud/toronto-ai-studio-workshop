@@ -34,11 +34,38 @@ def parse_request_v1(
     data = payload.get("data", {})
 
     if data:
+        response["past_messages_count"] = len(past_messages)
         response["cmds"] = data.get("cmds", [])
         response["executed_cmds"] = data.get("executed_cmds", [])
         response["url_configs"] = data.get("url_configs", [])
     
     return response
+
+def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform a command dictionary from the old format to the new format.
+    
+    Args:
+        command_dict: Dictionary containing command information in the format:
+            {
+                "command": str,
+                "execute": bool,
+                "files": List[Dict[str, str]]
+            }
+            
+    Returns:
+        Dictionary in the new format:
+            {
+                "Command": str,
+                "Output": str,
+                "execute": bool
+            }
+    """
+    return {
+        "Command": command_dict.get("command", ""),
+        "Output": "",
+        "execute": command_dict.get("execute", False)
+    }
 
 def create_response_v1(
         response_text: str,
@@ -50,23 +77,27 @@ def create_response_v1(
     """
     Generate a chat response based on the payload.
     """
+    # Transform commands if they exist
+    transformed_cmds = [transform_command(cmd) for cmd in (cmds or [])]
+    transformed_executed_cmds = [transform_command(cmd) for cmd in (executed_cmds or [])]
+
     return {
-                "pastMessages": payload.get("pastMessages", []),
-                "Content": response_text,
-                "terminalCommands": [],
-                "thread_id": payload.get("thread_id", ""),
-                "tenant_id": payload.get("tenant_id", ""),
-                "agent_managed_memory": payload.get("agent_managed_memory", True),
-                "platform_context": payload.get("platform_context", {}),
-                "data": {
-                    "response_type": "success",
-                    "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
-                    "cmds": cmds or [],
-                    "executed_cmds": executed_cmds or [],
-                    "url_configs": url_configs or []
-                },
-                "id": None
-            }
+        "pastMessages": payload.get("pastMessages", []) if payload else [],
+        "Content": response_text,
+        "terminalCommands": [],
+        "thread_id": payload.get("thread_id", "") if payload else "",
+        "tenant_id": payload.get("tenant_id", "") if payload else "",
+        "agent_managed_memory": payload.get("agent_managed_memory", True) if payload else True,
+        "platform_context": payload.get("platform_context", {}) if payload else {},
+        "data": {
+            "response_type": "success",
+            "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "Cmds": transformed_cmds,
+            "executedCmds": transformed_executed_cmds or [],
+            "url_configs": url_configs or []
+        },
+        "id": None
+    }
 
 
 def parse_request_v2(
