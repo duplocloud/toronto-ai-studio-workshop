@@ -4,6 +4,104 @@ import subprocess
 from strands.models.bedrock import BedrockModel
 
 
+def parse_request_v1(
+        payload: Dict[str, Any],
+        ) -> str:
+    """
+    Parse the incoming chat payload and convert it to the format expected by HumanInLoop.
+    
+    Args:
+        payload: The incoming JSON payload from the REST API
+        
+    Returns:
+        List of message dictionaries in the format expected by HumanInLoop
+        
+    Raises:
+        ValueError: If required fields are missing or invalid
+    """
+    
+    # Extract the current message content
+    current_content = payload.get("content", "")
+    past_messages = payload.get("pastMessages", [])
+    thread_id = payload.get("thread_id", "")
+    tenant_id = payload.get("tenant_id", "")
+    platform_context = payload.get("platform_context", {})
+    data = payload.get("data", {})
+    
+    return current_content
+
+def create_response_v1(
+        response_text: str,
+        payload: Optional[Dict[str, Any]] = None,
+        cmds: Optional[List[Dict[str, Any]]] = None,
+        executed_cmds: Optional[List[Dict[str, Any]]] = None,
+        url_configs: Optional[List[Dict[str, Any]]] = None
+        ) -> Dict[str, Any]:
+    """
+    Generate a chat response based on the payload.
+    """
+    return {
+                "pastMessages": payload.get("pastMessages", []),
+                "Content": response_text,
+                "terminalCommands": [],
+                "thread_id": payload.get("thread_id", ""),
+                "tenant_id": payload.get("tenant_id", ""),
+                "agent_managed_memory": payload.get("agent_managed_memory", True),
+                "platform_context": payload.get("platform_context", {}),
+                "data": {
+                    "response_type": "success",
+                    "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
+                    "cmds": cmds or [],
+                    "executed_cmds": executed_cmds or [],
+                    "url_configs": url_configs or []
+                },
+                "id": None
+            }
+
+
+def parse_request_v2(
+        payload: Dict[str, Any],
+        ) -> str:
+    """
+    Parse the incoming chat payload and convert it to the format expected by HumanInLoop.
+    
+    Args:
+        payload: The incoming JSON payload from the REST API
+        
+    Returns:
+        List of message dictionaries in the format expected by HumanInLoop
+        
+    Raises:
+        ValueError: If required fields are missing or invalid
+    """
+    # Extract the current message content
+    if not payload.get("messages"):
+            return ""
+        
+    last_message = payload["messages"][-1]
+    return str(last_message["content"])
+
+def create_response_v2(
+        response_text: str,
+        payload: Optional[Dict[str, Any]] = None,
+        cmds: Optional[List[Dict[str, Any]]] = None,
+        executed_cmds: Optional[List[Dict[str, Any]]] = None,
+        url_configs: Optional[List[Dict[str, Any]]] = None
+        ) -> Dict[str, Any]:
+    """
+    Generate a chat response based on the payload.
+    """
+    return {
+            "role": "assistant",
+            "content": response_text,
+            "data": {
+                "cmds": cmds or [],
+                "executed_cmds": executed_cmds or [],
+                "url_configs": url_configs or []
+            }
+        }
+
+
 class Endpoint:
     @staticmethod
     def parse(payload: Dict[str, Any]) -> str:
@@ -16,12 +114,31 @@ class Endpoint:
         Returns:
             Extracted content string from the last message
         """
-        if not payload.get("messages"):
-            return ""
-        
-        last_message = payload["messages"][-1]
-        return str(last_message["content"])
+        return parse_request_v1(payload)
     
+    @staticmethod
+    def success(
+        content: str,
+        payload: Optional[Dict[str, Any]] = None,
+        cmds: Optional[List[Dict[str, Any]]] = None,
+        executed_cmds: Optional[List[Dict[str, Any]]] = None,
+        url_configs: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a standardized success response payload in the new format.
+        
+        Args:
+            content: The main response content
+            payload: The original request payload (for compatibility)
+            cmds: Optional list of commands to propose (with execute: false)
+            executed_cmds: Optional list of commands that were executed
+            url_configs: Optional list of URL configurations for browser actions
+        
+        Returns:
+            Standardized success response dictionary
+        """
+        return create_response_v1(content, payload, cmds, executed_cmds, url_configs)
+
     @staticmethod
     def get_platform_context(payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -82,37 +199,7 @@ class Endpoint:
         
         return []
     
-    @staticmethod
-    def success(
-        content: str,
-        payload: Optional[Dict[str, Any]] = None,
-        cmds: Optional[List[Dict[str, Any]]] = None,
-        executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
-        """
-        Create a standardized success response payload in the new format.
-        
-        Args:
-            content: The main response content
-            payload: The original request payload (for compatibility)
-            cmds: Optional list of commands to propose (with execute: false)
-            executed_cmds: Optional list of commands that were executed
-            url_configs: Optional list of URL configurations for browser actions
-        
-        Returns:
-            Standardized success response dictionary
-        """
-        return {
-            "role": "assistant",
-            "content": content,
-            "data": {
-                "cmds": cmds or [],
-                "executed_cmds": executed_cmds or [],
-                "url_configs": url_configs or []
-            }
-        }
-    
+
     @staticmethod
     def error(
         error_message: str,
