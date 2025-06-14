@@ -4,9 +4,9 @@ from typing import Dict, Any
 import uvicorn
 import json
 import traceback
-from common.agent_utilties import get_agent_response, get_bedrock_claude_3_5, get_conversation_history
-from strands import Agent, Bedrock
-from common import Endpoint
+from utils import get_agent_response,  get_bedrock_model, get_conversation_history, Endpoint
+from strands import Agent
+from strands.models.bedrock import BedrockModel
 import boto3
 
 app = FastAPI(title="AWS Workshop API", version="0.1.0")
@@ -28,27 +28,32 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         print(f"[CHAT REQUEST] Received payload: {json.dumps(payload, indent=2)}")
         
         # Parse content from the payload using the utility method
-        content = Endpoint.parse(payload)
-        print(f"[CHAT PARSE] Extracted content: {content}")
+        request = Endpoint.parse(payload)
+        content = request.get("content", "")
+        print(f"[CHAT REQUEST] Content: {content}")
 
-        conversation_history = get_conversation_history(payload)
+        conversation_history = get_conversation_history(request)
 
         session = boto3.Session( # If using temporary credentials
-            region_name='us-east-2',
-            profile_name='test10'  # Optional: Use a specific profile
+            region_name='us-east-2'
         )
 
-        bedrock_model = get_bedrock_claude_3_5(session)
+        bedrock_model = BedrockModel(
+            model="us.amazon.nova-lite-v1:0",
+            tools=[],
+            workflow=[],
+            boto_session=session
+        )
+
+        #bedrock_model = get_bedrock_model(session)
 
         # Create echo response
         agent = Agent(
-            name="HelpDesk Chat",
-            description="A chatbot that can help with helpdesk issues",
             model=bedrock_model,
             messages=conversation_history
         )
 
-        agent_response = agent.run(content)
+        agent_response = agent(content)
         ai_response = get_agent_response(agent_response)
         
         # Use the Endpoint.success utility function
@@ -57,7 +62,6 @@ async def chat(payload: Dict[str, Any] = Body(...)):
             payload=payload
         )
         
-
         return response_payload
         
     except Exception as e:
@@ -69,12 +73,8 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         
         # Create error response using utility function
         error_message = f"Error processing your request: {str(e)}"
-        error_response = Endpoint.error(
-            error_message=error_message,
-            payload=payload,
-            error=e,
-            error_type=type(e).__name__
-        )
+        print(f"[CHAT ERROR] Error message: {error_message}")
+
         
         # Log the error response to console for Docker
         print(f"[CHAT ERROR RESPONSE] Sending error response: {json.dumps(error_response, indent=2)}")
@@ -82,3 +82,12 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         # Return error response with 500 status
         raise HTTPException(status_code=500, detail=error_response)
 
+if __name__ == "__main__":
+
+        uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=True,     # set True for auto-reload in dev
+        log_level="info",
+    )

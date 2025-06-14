@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -eo pipefail
-
 # Color codes for better readability
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -15,7 +13,6 @@ MESSAGE_CONTENT="${1:-Hello, world!}"
 API_BASE_URL="http://localhost:8001"
 HEALTH_ENDPOINT="${API_BASE_URL}/health"
 CHAT_ENDPOINT="${API_BASE_URL}/chat"
-USER_INPUT="$@"
 
 echo -e "${CYAN}Testing AWS Workshop API server (Demo 1)...${NC}"
 echo ""
@@ -37,7 +34,7 @@ test_chat_endpoint() {
     echo -e "${BLUE}Testing chat endpoint...${NC}"
     echo -e "${CYAN}POST ${CHAT_ENDPOINT}${NC}"
     
-    response=$(curl -v -w "\nHTTP_CODE:%{http_code}" -X POST "${CHAT_ENDPOINT}" \
+    response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${CHAT_ENDPOINT}" \
         -H "Content-Type: application/json" \
         -d "{\"content\": \"${MESSAGE_CONTENT}\"}")
     

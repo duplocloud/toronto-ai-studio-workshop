@@ -1,4 +1,7 @@
 import json
+import os
+import shutil
+import tempfile
 from typing import Dict, Any, List, Optional
 import datetime
 import subprocess
@@ -7,7 +10,7 @@ from strands.models.bedrock import BedrockModel
 
 def parse_request_v1(
         payload: Dict[str, Any],
-        ) -> str:
+        ) -> Dict[str, Any]:
     """
     Parse the incoming chat payload and convert it to the format expected by HumanInLoop.
     
@@ -29,23 +32,23 @@ def parse_request_v1(
         response["content"] = current_content
     # Extract the past messages
     past_messages = payload.get("pastMessages", [])
-    thread_id = payload.get("thread_id", "")
-    tenant_id = payload.get("tenant_id", "")
-    platform_context = payload.get("platform_context", {})
+    response["messages"] = past_messages
+    response["thread_id"] = payload.get("thread_id", "")
+    response["tenant_id"] = payload.get("tenant_id", "")
+    response["id"] = payload.get("id", "")
+    response["platform_context"] = payload.get("platform_context", {})
     data = payload.get("data", {})
-
-    
 
     if data:
         response["past_messages_count"] = len(past_messages)
-        response["cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("Cmds", []) or [])]
-        response["executed_cmds"] = [reverse_transform_command(cmd) for cmd in (data.get("executedCmds", []) or [])]
+        response["cmds"] = [transform_v1_command_to_v2_format(cmd) for cmd in (data.get("Cmds", []) or [])]
+        response["executed_cmds"] = [transform_v1_command_to_v2_format(cmd) for cmd in (data.get("executedCmds", []) or [])]
 
         response["url_configs"] = data.get("url_configs", [])
     
     return response
 
-def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+def transform_v2_command_to_v1_format(command_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Transform a command dictionary from the old format to the new format.
     
@@ -72,7 +75,7 @@ def transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
         "execute": command_dict.get("execute", False)
     }
 
-def reverse_transform_command(command_dict: Dict[str, Any]) -> Dict[str, Any]:
+def transform_v1_command_to_v2_format(command_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Transform a command dictionary from the new format back to the old format.
     
@@ -109,15 +112,15 @@ def create_response_v1(
     Generate a chat response based on the payload.
     """
     # Transform commands if they exist
-    transformed_cmds = [transform_command(cmd) for cmd in (cmds or [])]
-    transformed_executed_cmds = [transform_command(cmd) for cmd in (executed_cmds or [])]
+    transformed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (cmds or [])]
+    transformed_executed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (executed_cmds or [])]
 
     return {
         "pastMessages": payload.get("pastMessages", []) if payload else [],
         "Content": response_text,
         "terminalCommands": [],
-        "thread_id": payload.get("thread_id", "") if payload else "",
-        "tenant_id": payload.get("tenant_id", "") if payload else "",
+        "thread_id": payload.get("thread_id", ""),
+        "tenant_id": payload.get("tenant_id", ""),
         "agent_managed_memory": payload.get("agent_managed_memory", True) if payload else True,
         "platform_context": payload.get("platform_context", {}) if payload else {},
         "data": {
@@ -127,7 +130,7 @@ def create_response_v1(
             "executedCmds": transformed_executed_cmds or [],
             "url_configs": url_configs or []
         },
-        "id": None
+        "id": payload.get("id", "") 
     }
 
 
@@ -182,7 +185,7 @@ def create_response_v2(
 
 class Endpoint:
     @staticmethod
-    def parse(payload: Dict[str, Any]) -> str:
+    def parse(payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parse and extract content from the last message.
         
@@ -216,191 +219,7 @@ class Endpoint:
             Standardized success response dictionary
         """
         response = create_response_v1(content, payload, cmds, executed_cmds, url_configs)
-        print(f"[CHAT RESPONSE] Sending response: {json.dumps(response, indent=2)}")
         return response
-
-    @staticmethod
-    def get_platform_context(payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Extract platform context from the last user message.
-        
-        Args:
-            payload: The request payload dictionary
-        
-        Returns:
-            Platform context dictionary or empty dict
-        """
-        if "messages" in payload and payload["messages"]:
-            # Find the last user message with platform context
-            for message in reversed(payload["messages"]):
-                if (isinstance(message, dict) and 
-                    message.get("role") == "user" and 
-                    "platform_context" in message):
-                    return message["platform_context"]
-        
-        # Fallback to old format
-        return payload.get("platform_context", {})
-    
-    @staticmethod
-    def get_user_commands(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Extract commands from the last message's data.
-        
-        Args:
-            payload: The request payload dictionary
-        
-        Returns:
-            List of command dictionaries
-        """
-        if "messages" in payload and payload["messages"]:
-            last_message = payload["messages"][-1]
-            if isinstance(last_message, dict) and "data" in last_message:
-                data = last_message["data"]
-                return data.get("cmds", [])
-        
-        return []
-    
-    @staticmethod
-    def get_executed_commands(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Extract executed commands from the last message's data.
-        
-        Args:
-            payload: The request payload dictionary
-        
-        Returns:
-            List of executed command dictionaries
-        """
-        if "messages" in payload and payload["messages"]:
-            last_message = payload["messages"][-1]
-            if isinstance(last_message, dict) and "data" in last_message:
-                data = last_message["data"]
-                return data.get("executed_cmds", [])
-        
-        return []
-    
-
-    @staticmethod
-    def error(
-        error_message: str,
-        payload: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
-        error_type: str = "processing"
-    ) -> Dict[str, Any]:
-        """
-        Create a standardized error response payload in the new format.
-        
-        Args:
-            error_message: Human-readable error message
-            payload: The original request payload (for compatibility)
-            error: The exception that occurred (optional)
-            error_type: Type of error for categorization
-        
-        Returns:
-            Standardized error response dictionary
-        """
-        data = {
-            "cmds": [],
-            "executed_cmds": [],
-            "url_configs": [],
-            "error_type": error_type,
-            "processed_at": datetime.datetime.utcnow().isoformat() + "Z"
-        }
-        
-        if error:
-            data["error"] = str(error)
-        
-        return {
-            "role": "assistant",
-            "content": error_message,
-            "data": data
-        }
-    
-    @staticmethod
-    def propose_commands(
-        content: str,
-        commands: List[str],
-        files: Optional[List[Dict[str, str]]] = None
-    ) -> Dict[str, Any]:
-        """
-        Propose commands for user approval.
-        
-        Args:
-            content: Explanation of what the commands will do
-            commands: List of command strings to propose
-            files: Optional list of files to create (each with file_path and file_content)
-        
-        Returns:
-            Response with commands set to execute: false
-        """
-        cmds = []
-        for command in commands:
-            cmd_dict = {
-                "command": command,
-                "execute": False
-            }
-            if files:
-                cmd_dict["files"] = files
-            cmds.append(cmd_dict)
-        
-        return Endpoint.success(content, cmds=cmds)
-    
-    @staticmethod
-    def share_executed_commands(
-        content: str,
-        executed_commands: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
-        """
-        Share results of executed commands.
-        
-        Args:
-            content: Analysis or explanation of the command results
-            executed_commands: List of dicts with 'command' and 'output' keys
-        
-        Returns:
-            Response with executed commands
-        """
-        return Endpoint.success(content, executed_cmds=executed_commands)
-    
-    @staticmethod
-    def provide_urls(
-        content: str,
-        urls: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
-        """
-        Provide URLs for browser actions.
-        
-        Args:
-            content: Explanation of the URLs being provided
-            urls: List of dicts with 'url' and 'description' keys
-        
-        Returns:
-            Response with URL configurations
-        """
-        return Endpoint.success(content, url_configs=urls)
-    
-    @staticmethod
-    def create_file_operation_command(
-        command: str,
-        files: List[Dict[str, str]],
-        execute: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Create a command that includes file operations.
-        
-        Args:
-            command: The command to execute
-            files: List of files to create (each with file_path and file_content)
-            execute: Whether the command should be executed immediately
-        
-        Returns:
-            Command dictionary with file operations
-        """
-        return {
-            "command": command,
-            "execute": execute,
-            "files": files
-        }
 
 
 def run_subprocess_command(command: str, shell=True, capture_stderr=True, text=True, timeout=None,cwd=None):
@@ -531,28 +350,78 @@ def read_text_file(file_path, encoding='utf-8', strip_whitespace=False):
         }
 
 
-def get_agent_response(response: any) -> str:
-    """
-    Get the response from the agent
-    """
-    return response.message["content"][0]["text"] 
-
-
-def get_conversation_history(payload: any) -> str:
-    """
-    Get the conversation history from the agent
-    """
-    past_messages = payload.get("pastMessages", [])
-    messages = [{"role": message.role, "content": [{"text": message.content}]} for message in past_messages]
-
-    return messages
-
-
-def get_bedrock_claude_3_5(session: any) -> str:
+def get_bedrock_model(session: any) -> str:
     return BedrockModel(
-            model="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+            model="us.amazon.nova-lite-v1:0",
             tools=[],
             workflow=[],
             boto_session=session
         )
 
+def run_command(executed_commands, command, command_text, files):
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for file_info in files:
+            file_path = file_info.get("file_path")
+            file_content = file_info.get("file_content")
+                            
+            if not file_path or file_content is None:
+                continue
+                                
+                            # Create full path within the temp directory
+            full_path = os.path.join(temp_dir, file_path)
+                                
+                            # Create directory structure if it doesn't exist
+            dir_path = os.path.dirname(full_path)
+            if dir_path and not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+                                
+                            # Write the file
+            with open(full_path, 'w') as f:
+                f.write(file_content)
+                                    
+            command_text = f"cd {temp_dir} && {command_text}"
+            response = run_subprocess_command(command_text, cwd=temp_dir)
+                            # Add the response to the payload
+            command["output"] = response.get("stdout", "") # json.dumps(response, indent=2)
+            print(f"[CHAT EXECUTE COMMAND] Response: {json.dumps(response, indent=2)}")
+
+            executed_commands.append(command)
+    except Exception as e:
+        print(f"[CHAT EXECUTE COMMAND] Error: {e}")
+        command["output"] = f"Error: {e}"
+    finally:
+                        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+
+def get_conversation_history(request: any) -> list[dict[str, Any]]:
+    """
+    Get the conversation history from the agent and convert it to the expected format.
+    
+    Args:
+        request: Dictionary containing pastMessages with userMsg/agentResponse structure
+        
+    Returns:
+        List of messages in the format [{"role": str, "content": [{"text": str}]}]
+        Returns empty list if conversion fails
+    """
+    try:
+        past_messages = request.get("pastMessages", [])
+        messages = []
+        
+        for msg in past_messages:
+            if "userMsg" in msg:
+                messages.append({
+                    "role": "user",
+                    "content": [{"text": msg["userMsg"]["content"]}]
+                })
+            elif "agentResponse" in msg:
+                messages.append({
+                    "role": "assistant",
+                    "content": [{"text": msg["agentResponse"]["content"]}]
+                })
+        
+        return messages
+    except Exception as e:
+        print(f"Error converting conversation history: {str(e)}")
+        return []

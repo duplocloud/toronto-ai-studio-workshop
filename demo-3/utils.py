@@ -393,6 +393,12 @@ def run_command(executed_commands, command, command_text, files):
     finally:
                         # Clean up the temporary directory
         shutil.rmtree(temp_dir)
+        
+def get_agent_response(response: any) -> str:
+    """
+    Get the response from the agent
+    """
+    return response.message["content"][0]["text"] 
 
 def get_conversation_history(request: any) -> list[dict[str, Any]]:
     """
