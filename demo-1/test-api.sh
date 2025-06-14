@@ -8,6 +8,8 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Set default message if none provided
+MESSAGE_CONTENT="${1:-Hello, world!}"
 API_BASE_URL="http://localhost:8001"
 HEALTH_ENDPOINT="${API_BASE_URL}/health"
 CHAT_ENDPOINT="${API_BASE_URL}/chat"
@@ -34,7 +36,7 @@ test_chat_endpoint() {
     
     response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${CHAT_ENDPOINT}" \
         -H "Content-Type: application/json" \
-        -d '{"messages": [{"role":"user", "content":"Hello World!"}]}')
+        -d "{\"content\": \"${MESSAGE_CONTENT}\"}")
     
     http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
     body=$(echo "$response" | sed '/HTTP_CODE:/d')
