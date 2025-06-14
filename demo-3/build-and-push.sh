@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Configuration
-VERSION="-demo3"
+VERSION="-demo3v1"
 ECR_REPOSITORY_NAME="agents"
 AWS_REGION="us-east-1"
-ACCOUNT_ID="715432481168"
+ACCOUNT_ID="$(aws sts get-caller-identity --query "Account" --output text)"
 
 # Extract username from VSCODE_PROXY_URI and append version if set
 echo "Using VSCODE_PROXY_URI: $VSCODE_PROXY_URI"
