@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-VERSION="-demo2v1"
+VERSION="-demo2"
 ECR_REPOSITORY_NAME="agents"
 AWS_REGION="us-east-1"
 ACCOUNT_ID="$(aws sts get-caller-identity --query "Account" --output text)"
