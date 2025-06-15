@@ -9,7 +9,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Set default message if none provided
-MESSAGE_CONTENT="${1:-Hello World!}"
+MESSAGE_CONTENT="${*:-Hello World!}"
 API_BASE_URL="http://localhost:8001"
 HEALTH_ENDPOINT="${API_BASE_URL}/health"
 CHAT_ENDPOINT="${API_BASE_URL}/chat"
