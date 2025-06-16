@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from typing import Dict, Any
@@ -21,30 +20,26 @@ async def chat(payload: Dict[str, Any] = Body(...)):
     Accepts a message payload and echoes it back in the original complex format.
     """
     try:
+
         # Parse content from the payload using the utility method
         request = Endpoint.parse(payload)
+        request_text = request.get("content", "")
+
         response_text = ""
         executed_commands = []
-        commands_executed = False
         cmds = []
+        url_configs = []
+        browser_urls = []
 
-        commands = request.get("cmds", [])
-        if len(commands) > 0:
+        if request_text == "":
+            commands = request.get("cmds", [])
 
-            executed_commands = []
-            for command in commands:
+            if len(commands) > 0:
+                response_text = "Here are the results of the commands."
+                executed_commands = run_commands(commands)
 
-                command_text = command.get("command", "")
-                execute = command.get("execute", False)
-                files = command.get("files", [])
-
-                if execute:
-                    commands_executed = True
-                    run_command(executed_commands, command, command_text, files)
-                else:
-                    cmds.append(command)
-        else:
-            response_text = "Would like to list the files in the current directory?"
+        elif request_text == "command":
+            response_text = "Do you want view the content of the file sample.txt?"
             cmds.append({
                 "command": "cat sample.txt",
                 "execute": False,
@@ -56,22 +51,51 @@ async def chat(payload: Dict[str, Any] = Body(...)):
                 ]
             })
         
-        if commands_executed:
-            response_text = "Here are the results of the commands."
+        elif request_text == "url":
+            response_text = "Visit Duplo Cloud!"
+            url_configs.append({
+                "url": "https://duplocloud.com",
+                "description": "Visit Duplo Cloud"
+            })
 
+        elif request_text == "browser":
+            response_text = "Visit Duplo Cloud!"
+            browser_urls.append({
+                "url": "https://duplocloud.com",
+                "description": "Visit Duplo Cloud"
+            })
+
+        else:
+            response_text = "How can I help you today? I can execute a command, or I can navigate to a URL, or I can open a browser, by typing 'command', 'url', or 'browser'"
           
         return Endpoint.success(
             content=response_text,
             payload=request,
             cmds=cmds,
             executed_cmds=executed_commands,
-            url_configs=[]
+            url_configs=url_configs,
+            browser_urls=browser_urls
         )
         
     except Exception as e:
         
         # Return error response with 500 status
         raise HTTPException(status_code=500, detail=traceback.format_exc())
+
+def run_commands(commands):
+    executed_commands = []
+                
+    for command in commands:
+        command_text = command.get("command", "")
+        execute = command.get("execute", False)
+        files = command.get("files", [])
+
+        if execute:
+            run_command(executed_commands, command, command_text, files)
+        else:
+            executed_commands.append(command)
+            
+    return executed_commands
 
 
 if __name__ == "__main__":
