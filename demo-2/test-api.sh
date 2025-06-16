@@ -12,7 +12,7 @@ API_BASE_URL="http://localhost:8001"
 HEALTH_ENDPOINT="${API_BASE_URL}/health"
 CHAT_ENDPOINT="${API_BASE_URL}/chat"
 
-echo -e "${CYAN}Testing AWS Workshop API server (Demo 1)...${NC}"
+echo -e "${CYAN}Testing AWS Workshop API server (Demo 2)...${NC}"
 echo ""
 
 # Function to check if server is responding
