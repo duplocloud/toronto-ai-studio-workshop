@@ -30,11 +30,9 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         cmds = []
         url_configs = []
         browser_use = []
+        commands = request.get("cmds", [])     
 
-        if request_text == "":
-            commands = request.get("cmds", [])
-
-            if len(commands) > 0:
+        if len(commands) > 0:
                 response_text = "Here are the results of the commands."
                 executed_commands = run_commands(commands)
 
