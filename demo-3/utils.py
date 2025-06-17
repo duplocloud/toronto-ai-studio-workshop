@@ -164,25 +164,67 @@ def parse_request_v2(
         "url_configs": payload.get("data", {}).get("url_configs", [])
     }
 
-def create_response_v2(
+def create_response_v1(
         response_text: str,
         payload: Optional[Dict[str, Any]] = None,
         cmds: Optional[List[Dict[str, Any]]] = None,
         executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
+        url_configs: Optional[List[Dict[str, Any]]] = None,
+        browser_use: Optional[List[Dict[str, Any]]] = None
         ) -> Dict[str, Any]:
     """
     Generate a chat response based on the payload.
     """
-    return {
-            "role": "assistant",
-            "content": response_text,
-            "data": {
-                "cmds": cmds or [],
-                "executed_cmds": executed_cmds or [],
-                "url_configs": url_configs or []
-            }
+    # Transform commands if they exist
+    transformed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (cmds or [])]
+    transformed_executed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (executed_cmds or [])]
+
+    ex = []
+    for executed_command in transformed_executed_cmds:
+        ex.append({
+            "Command": executed_command.get("Command", ""),
+            "Output": executed_command.get("Output", ""),
+            "execute": True,
+        })
+
+    transformed_executed_cmds = ex
+
+    browser_use_transformed = {}
+
+    if(len(browser_use) > 0):
+        browser_use_transformed = {
+            "actions": browser_use,
+            "subtask_complete": False,
+            "task_complete": True,
         }
+
+    # Build data dictionary, only including url_configs and browser_use if they have items
+    data = {
+        "response_type": "success",
+        "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "Cmds": transformed_cmds,
+        "executedCmds": transformed_executed_cmds or [],
+    }
+    
+    # Only include url_configs if it has items
+    if url_configs:
+        data["url_configs"] = url_configs
+    
+    # Only include browser_use if it has items
+    if browser_use_transformed:
+        data["browser_use"] = browser_use_transformed
+
+    return {
+        "pastMessages": payload.get("pastMessages", []) if payload else [],
+        "Content": response_text,
+        "terminalCommands": [],
+        "thread_id": payload.get("thread_id", ""),
+        "tenant_id": payload.get("tenant_id", ""),
+        "agent_managed_memory": payload.get("agent_managed_memory", True) if payload else True,
+        "platform_context": payload.get("platform_context", {}) if payload else {},
+        "data": data,
+        "id": payload.get("id", "") 
+    }
 
 
 class Endpoint:
