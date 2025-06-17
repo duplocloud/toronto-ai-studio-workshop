@@ -106,7 +106,8 @@ def create_response_v1(
         payload: Optional[Dict[str, Any]] = None,
         cmds: Optional[List[Dict[str, Any]]] = None,
         executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
+        url_configs: Optional[List[Dict[str, Any]]] = None,
+        browser_urls: Optional[List[Dict[str, Any]]] = None
         ) -> Dict[str, Any]:
     """
     Generate a chat response based on the payload.
@@ -128,7 +129,8 @@ def create_response_v1(
             "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
             "Cmds": transformed_cmds,
             "executedCmds": transformed_executed_cmds or [],
-            "url_configs": url_configs or []
+            "url_configs": url_configs or [],
+            "browser_urls": browser_urls or []
         },
         "id": payload.get("id", "") 
     }
@@ -203,7 +205,8 @@ class Endpoint:
         payload: Optional[Dict[str, Any]] = None,
         cmds: Optional[List[Dict[str, Any]]] = None,
         executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
+        url_configs: Optional[List[Dict[str, Any]]] = None,
+        browser_urls: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Create a standardized success response payload in the new format.
@@ -214,11 +217,11 @@ class Endpoint:
             cmds: Optional list of commands to propose (with execute: false)
             executed_cmds: Optional list of commands that were executed
             url_configs: Optional list of URL configurations for browser actions
-        
+            browser_urls: Optional list of browser URLs to open
         Returns:
             Standardized success response dictionary
         """
-        response = create_response_v1(content, payload, cmds, executed_cmds, url_configs)
+        response = create_response_v1(content, payload, cmds, executed_cmds, url_configs, browser_urls)
         return response
 
 
@@ -371,7 +374,7 @@ def run_command(executed_commands, command, command_text, files):
                             # Create full path within the temp directory
             full_path = os.path.join(temp_dir, file_path)
                                 
-                            # Create directory structure if it doesn't exist
+            # Create directory structure if it doesn't exist
             dir_path = os.path.dirname(full_path)
             if dir_path and not os.path.exists(dir_path):
                 os.makedirs(dir_path)
@@ -393,12 +396,28 @@ def run_command(executed_commands, command, command_text, files):
     finally:
                         # Clean up the temporary directory
         shutil.rmtree(temp_dir)
+
+def run_command_simple(executed_commands, command, command_text):
+    """
+    Execute a command in the application root directory without file handling.
+    
+    Args:
+        executed_commands: List to append the executed command to
+        command: Command dictionary to update with output
+        command_text: The actual command string to execute
+    """
+    try:
+        # Execute command in application root directory
+        response = run_subprocess_command(command_text)
         
-def get_agent_response(response: any) -> str:
-    """
-    Get the response from the agent
-    """
-    return response.message["content"][0]["text"] 
+        # Add the response to the command
+        command["output"] = response.get("stdout", "")
+        print(f"[CHAT EXECUTE COMMAND] Response: {json.dumps(response, indent=2)}")
+        
+        executed_commands.append(command)
+    except Exception as e:
+        print(f"[CHAT EXECUTE COMMAND] Error: {e}")
+        command["output"] = f"Error: {e}"
 
 def get_conversation_history(request: any) -> list[dict[str, Any]]:
     """
@@ -431,3 +450,10 @@ def get_conversation_history(request: any) -> list[dict[str, Any]]:
     except Exception as e:
         print(f"Error converting conversation history: {str(e)}")
         return []
+
+        
+def get_agent_response(response: any) -> str:
+    """
+    Get the response from the agent
+    """
+    return response.message["content"][0]["text"] 

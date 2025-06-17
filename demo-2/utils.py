@@ -106,7 +106,8 @@ def create_response_v1(
         payload: Optional[Dict[str, Any]] = None,
         cmds: Optional[List[Dict[str, Any]]] = None,
         executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
+        url_configs: Optional[List[Dict[str, Any]]] = None,
+        browser_use: Optional[List[Dict[str, Any]]] = None
         ) -> Dict[str, Any]:
     """
     Generate a chat response based on the payload.
@@ -114,6 +115,14 @@ def create_response_v1(
     # Transform commands if they exist
     transformed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (cmds or [])]
     transformed_executed_cmds = [transform_v2_command_to_v1_format(cmd) for cmd in (executed_cmds or [])]
+    browser_use_transformed = {}
+
+    if(len(browser_use) > 0):
+        browser_use_transformed = {
+            "actions": browser_use,
+            "subtask_complete": False,
+            "task_complete": True,
+        }
 
     return {
         "pastMessages": payload.get("pastMessages", []) if payload else [],
@@ -128,7 +137,8 @@ def create_response_v1(
             "processed_at": datetime.datetime.utcnow().isoformat() + "Z",
             "Cmds": transformed_cmds,
             "executedCmds": transformed_executed_cmds or [],
-            "url_configs": url_configs or []
+            "url_configs": url_configs or [],
+            "browser_use": browser_use_transformed
         },
         "id": payload.get("id", "") 
     }
@@ -203,7 +213,8 @@ class Endpoint:
         payload: Optional[Dict[str, Any]] = None,
         cmds: Optional[List[Dict[str, Any]]] = None,
         executed_cmds: Optional[List[Dict[str, Any]]] = None,
-        url_configs: Optional[List[Dict[str, Any]]] = None
+        url_configs: Optional[List[Dict[str, Any]]] = None,
+        browser_use: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Create a standardized success response payload in the new format.
@@ -214,11 +225,11 @@ class Endpoint:
             cmds: Optional list of commands to propose (with execute: false)
             executed_cmds: Optional list of commands that were executed
             url_configs: Optional list of URL configurations for browser actions
-        
+            browser_use: Optional list of browser URLs to open
         Returns:
             Standardized success response dictionary
         """
-        response = create_response_v1(content, payload, cmds, executed_cmds, url_configs)
+        response = create_response_v1(content, payload, cmds, executed_cmds, url_configs, browser_use)
         return response
 
 
@@ -425,3 +436,10 @@ def get_conversation_history(request: any) -> list[dict[str, Any]]:
     except Exception as e:
         print(f"Error converting conversation history: {str(e)}")
         return []
+
+        
+def get_agent_response(response: any) -> str:
+    """
+    Get the response from the agent
+    """
+    return response.message["content"][0]["text"] 

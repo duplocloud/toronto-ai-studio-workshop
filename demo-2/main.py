@@ -29,7 +29,7 @@ async def chat(payload: Dict[str, Any] = Body(...)):
         executed_commands = []
         cmds = []
         url_configs = []
-        browser_urls = []
+        browser_use = []
 
         if request_text == "":
             commands = request.get("cmds", [])
@@ -60,10 +60,11 @@ async def chat(payload: Dict[str, Any] = Body(...)):
 
         elif request_text == "browser":
             response_text = "Visit Duplo Cloud!"
-            browser_urls.append({
-                "url": "https://duplocloud.com",
-                "description": "Visit Duplo Cloud"
-            })
+            browser_use.append({
+                    "action": "go_to_url",
+                    "action_type": "navigate",
+                    "href": "https://duplo.workshop05.duploworkshop.com/"
+                })
 
         else:
             response_text = "How can I help you today? I can execute a command, or I can navigate to a URL, or I can open a browser, by typing 'command', 'url', or 'browser'"
@@ -74,7 +75,7 @@ async def chat(payload: Dict[str, Any] = Body(...)):
             cmds=cmds,
             executed_cmds=executed_commands,
             url_configs=url_configs,
-            browser_urls=browser_urls
+            browser_use=browser_use
         )
         
     except Exception as e:
