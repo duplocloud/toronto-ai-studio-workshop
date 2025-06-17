@@ -91,8 +91,7 @@ Rules:
         conversation_history = get_conversation_history(request)
 
         session = boto3.Session(
-            region_name='us-east-2',
-            profile_name='test10'
+            region_name='us-east-2'
         )
 
         bedrock_model = BedrockModel(
