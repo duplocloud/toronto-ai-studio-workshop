@@ -4,6 +4,7 @@ from typing import Dict, Any
 import uvicorn
 import traceback
 from utils import Endpoint, run_command
+import json
 
 app = FastAPI(title="AWS Workshop API", version="0.1.0")
 
@@ -23,6 +24,9 @@ async def chat(payload: Dict[str, Any] = Body(...)):
 
         # Parse content from the payload using the utility method
         request = Endpoint.parse(payload)
+
+        print(json.dumps(request, indent=4))
+
         request_text = request.get("content", "")
 
         response_text = ""
@@ -83,6 +87,7 @@ async def chat(payload: Dict[str, Any] = Body(...)):
 
 def run_commands(commands):
     executed_commands = []
+    ex=[]
                 
     for command in commands:
         command_text = command.get("command", "")
@@ -91,10 +96,19 @@ def run_commands(commands):
 
         if execute:
             run_command(executed_commands, command, command_text, files)
+
         else:
             executed_commands.append(command)
+
+        for executed_command in executed_commands:
+            ex.append({
+                "command": executed_command.get("command", ""),
+                "output": executed_command.get("output", "")
+            })
+    
+
             
-    return executed_commands
+    return ex
 
 
 if __name__ == "__main__":

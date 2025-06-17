@@ -41,7 +41,7 @@ echo -e "${YELLOW}Starting build and ECR push process...${NC}"
 
 # Build the image with platform detection
 echo "Building image '$LOCAL_CONTAINER_IMAGE' for platform '$PLATFORM'..."
-docker build -t $LOCAL_CONTAINER_IMAGE .
+docker build --no-cache -t $LOCAL_CONTAINER_IMAGE .
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to build image '$LOCAL_CONTAINER_IMAGE'.${NC}"
