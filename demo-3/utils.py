@@ -191,7 +191,7 @@ def create_response_v1(
 
     browser_use_transformed = {}
 
-    if(len(browser_use) > 0):
+    if browser_use and len(browser_use) > 0:
         browser_use_transformed = {
             "actions": browser_use,
             "subtask_complete": False,
