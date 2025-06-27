@@ -1,175 +1,189 @@
 from fastapi import FastAPI, HTTPException, Body
-from pydantic import BaseModel
 from typing import Dict, Any
 import uvicorn
 import json
 import traceback
-from utils import get_agent_response,  get_conversation_history, Endpoint, run_command, run_command_simple
+from utils import get_conversation_history, Endpoint, run_command_simple
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 import boto3
+import logging
 
 app = FastAPI(title="AWS Workshop API", version="0.1.0")
+
+# Configure basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Unified system prompt for the agent (shared across all requests)
+SYSTEM_PROMPT = """You are a JSON response bot. Your entire response MUST be valid JSON only.
+
+RESPONSE FORMAT:
+- Commands: {"content": "description", "data": {"cmds": [{"command": "bash_command", "execute": false}]}}
+- General: {"content": "answer", "data": {}}
+
+STRICT RULES:
+1. RESPOND ONLY WITH JSON
+2. NO TEXT BEFORE/AFTER JSON
+3. NO EXPLANATIONS OUTSIDE JSON
+4. NO MARKDOWN CODE BLOCKS
+5. VALIDATE JSON BEFORE RESPONDING
+
+EXAMPLES:
+User: "list files" → {"content": "Command to list directory contents", "data": {"cmds": [{"command": "ls -la", "execute": false}]}}
+User: "what is git?" → {"content": "Git is a distributed version control system for tracking changes in source code.", "data": {}}
+
+IMPORTANT: Start your response with { and end with }. Nothing else."""
+
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
+
+def extract_json_from_response(response_text: str) -> str:
+    """Return the JSON portion of a response string.
+
+    The model occasionally adds prose or wraps the JSON in code fences. This helper
+    attempts to locate and return the first valid JSON object it can find. If no
+    JSON is found, the original text is returned so that downstream logic can
+    handle the error gracefully.
+    """
+    response_text = response_text.strip()
+
+    # Fast-path: string already looks like pure JSON
+    if response_text.startswith("{") and response_text.endswith("}"):
+        return response_text
+
+    import re
+
+    # Look for JSON surrounded by fenced code blocks
+    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response_text, re.DOTALL)
+    if match:
+        return match.group(1)
+
+    # Fallback: first curly-brace section
+    match = re.search(r"(\{.*?\})", response_text, re.DOTALL)
+    if match:
+        return match.group(1)
+
+    return response_text
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    print("[HEALTH] Health check requested")
+    logger.info("Health check requested")
     return {"status": "healthy", "service": "aws-workshop-api"}
 
 @app.post("/chat")
 async def chat(payload: Dict[str, Any] = Body(...)):
     """
-    Chat endpoint that handles both regular messages and command responses.
+    Unified chat endpoint that handles both command generation and general questions.
+    Always returns JSON in the specified format.
     """
     try:
-        # Define the system prompt as a variable
-        system_prompt = """You are an coder who only responds in a specific JSON structure.
-Your response must be only a valid JSON object, nothing else!! And with the following structure:
-{
-  "content": "Your response message here",
-  "data": {
-    "cmds": [
-      {
-        "command": "bash command here",
-        "execute": false
-      }
-    ]
-  }
-}
+        # Use the shared system prompt
+        system_prompt = SYSTEM_PROMPT
 
-Rules:
-1. Always respond with valid JSON!!! In the exact structure shown above
-2. The "content" field should contain your response message
-3. The "data.cmds" array should contain command objects with "command" and "execute" fields
-4. The "command" field should contain a valid bash command
-5. The "execute" field should be a boolean (true/false)
-6. Do not include any text outside the JSON structure
-7. Do not include any placeholders in the commands
-8. Only include a SINGLE COMMAND. 
-9. Do not EXPLAIN the command, just return the command.
-
-## Example:
-### User Prompt:
-    Generate the command to list the files in the current directory.
-
-### JSON Response:
-    {
-    "content": "Here is the command to list the files in the current directory.",
-    "data": {
-        "cmds": [
-        {
-            "command": "ls -l",
-            "execute": false
-        }
-        ]
-    }
-    }
-"""
-        # Log the incoming request to console for Docker
-        print(f"[CHAT REQUEST] Received payload: {json.dumps(payload, indent=2)}")
+        # Log the incoming request
+        logger.debug("Received payload: %s", json.dumps(payload, indent=2))
         
-        # Parse content from the payload using the utility method
+        # Parse content from the payload
         request = Endpoint.parse(payload)
         content = request.get("content", "")
         cmds = request.get("cmds", [])
-        print(f"[CHAT REQUEST] Content: {content}")
+        logger.debug("Content: %s", content)
 
-        # Check if this is a command response
+        # Check if this is a command execution request
         if len(cmds) > 0:
             # This is a command response, process it
-            print(f"[CHAT RESPONSE] Executing commands: {cmds}")
+            logger.info("Executing commands: %s", cmds)
             executed_commands = run_commands(cmds)
-            print(f"[CHAT RESPONSE] Executed commands: {executed_commands}")
+            logger.info("Executed commands: %s", executed_commands)
             return Endpoint.success(
                 content="Command executed successfully",
                 payload=payload,
                 executed_cmds=executed_commands
             )
 
-        # For regular messages, proceed with the LLM call
+        # For new messages, use the unified agent
         conversation_history = get_conversation_history(request)
 
-        session = boto3.Session(
-            region_name='us-east-2'
-        )
+        session = boto3.Session(region_name='us-east-2', profile_name='test10')
 
+        # Create the unified agent
         bedrock_model = BedrockModel(
-            model="us.amazon.nova-lite-v1:0",
-            system_prompt=system_prompt,
+            model="anthropic.claude-3-5-sonnet-20240620-v1:0",
             temperature=0.1,
             tools=[],
             workflow=[],
             boto_session=session
         )
 
-        # Create echo response
         agent = Agent(
+            system_prompt=system_prompt,
             model=bedrock_model,
             messages=conversation_history
         )
 
+        # Get unified response
         agent_response = agent(content)
-        ai_response = get_agent_response(agent_response)
-        print(f"[CHAT RESPONSE] AI Response: {ai_response}")
-
-        # Second LLM call to parse the first command
-        parse_prompt = f"""You are a command parser. Your task is to extract ONLY the first bash command from the previous AI response.
-You must respond in this exact JSON structure:
-{{  
-    "command": "the first command from the previous response"
-}} 
-
-Rules:
-1. Only return the command string, nothing else
-2. If there are no commands, return an empty string
-3. Do not include any explanations or additional text
-4. The response must be valid JSON
-
-## Previous AI Response:
-{ai_response}
-"""
-
-        bedrock_model = BedrockModel(
-            model="us.amazon.nova-lite-v1:0",
-            system_prompt=system_prompt,
-            temperature=0.1,
-            tools=[],
-            workflow=[],
-            boto_session=session
-        )
-
-        # Create a new agent for parsing
-        parse_agent = Agent(
-            model=bedrock_model,
-        )
-
-        # Get the parsed command
-        parse_response = parse_agent(parse_prompt)
-        parsed_command = json.loads(get_agent_response(parse_response))
-        print(f"[PARSE RESPONSE] Parsed command: {parsed_command}")
-
-        cmds.append({
-            "command": parsed_command["command"],
-            "execute": False
-        })
-
         
-        # Return the command response
-        return Endpoint.success(
-            content="Do you want to execute the command?",
-            cmds=cmds,
-            payload=payload
-        )
+        # Extract response - handle different Strands response formats
+        try:
+            if hasattr(agent_response, 'message') and agent_response.message:
+                ai_response = agent_response.message["content"][0]["text"]
+            elif hasattr(agent_response, 'messages') and agent_response.messages:
+                ai_response = agent_response.messages[-1].content
+            else:
+                ai_response = str(agent_response)
+        except (KeyError, IndexError, AttributeError) as e:
+            logger.warning("Response extraction error: %s", e)
+            ai_response = str(agent_response)
+            
+        logger.debug("AI Response: %s", ai_response)
+
+        # Clean and parse the JSON response
+        try:
+            cleaned_response = extract_json_from_response(ai_response)
+            
+            parsed_response = json.loads(cleaned_response)
+            response_content = parsed_response.get("content", "")
+            response_data = parsed_response.get("data", {})
+            
+            # Check if this is a command response
+            if "cmds" in response_data and response_data["cmds"]:
+                # It's a command response - return it for user approval
+                logger.info("Commands detected: %s", response_data["cmds"])
+                return Endpoint.success(
+                    content=response_content,
+                    cmds=response_data["cmds"],
+                    payload=payload
+                )
+            else:
+                # It's a general response - return the content
+                logger.info("General response - content: %s", response_content)
+                return Endpoint.success(
+                    content=response_content,
+                    payload=payload
+                )
+                
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse AI response: %s", e)
+            logger.debug("Raw response: %s", ai_response)
+            
+            # Fallback response
+            return Endpoint.success(
+                content="I apologize, but I encountered an error processing your request. Please try again.",
+                payload=payload
+            )
         
     except Exception as e:
-        # Log error details to console for Docker debugging
+        # Log error details
         error_details = traceback.format_exc()
-        print(f"[CHAT ERROR] Exception occurred: {str(e)}")
-        print(f"[CHAT ERROR] Full traceback:\n{error_details}")
-        print(f"[CHAT ERROR] Original payload: {json.dumps(payload, indent=2) if payload else 'None'}")
+        logger.error("Exception occurred: %s", e)
+        logger.error("Full traceback:\n%s", error_details)
+        logger.debug("Original payload: %s", json.dumps(payload, indent=2) if payload else 'None')
         
-        # Return error response with 500 status
+        # Return error response
         raise HTTPException(status_code=500, detail=error_details)
     
 def run_commands(commands):
