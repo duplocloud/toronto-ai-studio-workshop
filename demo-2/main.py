@@ -54,14 +54,14 @@ async def chat(payload: Dict[str, Any] = Body(...)):
             })
         
         elif request_text == "url":
-            response_text = "Visit Duplo Cloud!"
+            response_text = "Visit DuploCloud!"
             url_configs.append({
                 "url": "https://duplocloud.com",
-                "description": "Visit Duplo Cloud"
+                "description": "Visit DuploCloud"
             })
 
         elif request_text == "browser":
-            response_text = "Visit Duplo Cloud!"
+            response_text = "Visit DuploCloud!"
             browser_use.append({
                     "action": "go_to_url",
                     "action_type": "navigate",
